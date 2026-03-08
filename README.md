@@ -24,7 +24,7 @@ A lightweight, browser-based tactical whiteboard for designing sports plays. Thi
 
 No installation required! 
 
-Either go to [ADDING LINK SOON] or:
+Either go to https://rorymahoney.github.io/Sports-Playbook-Maker/ or:
 
 Download the index.html and run it in your browser
 
