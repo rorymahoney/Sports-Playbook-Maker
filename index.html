@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Sports Playmaker - Fixed Graphics</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1a1a2e; color: #fff; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
+        .toolbar { background-color: #16213e; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .tool-group { display: flex; gap: 5px; border-right: 2px solid #0f3460; padding-right: 10px; align-items: center; }
+        .tool-group:last-child { border-right: none; }
+        select, button { padding: 8px 12px; font-size: 13px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button { background-color: #0f3460; color: white; transition: 0.2s; }
+        button:hover { background-color: #e94560; }
+        button.active { background-color: #e94560; }
+        .btn-save { background-color: #27ae60; }
+        .btn-offense { background-color: #3498db; }
+        .btn-defense { background-color: #e67e22; }
+        #canvas-container { border: 5px solid #0f3460; border-radius: 8px; background-color: #000; overflow: hidden; }
+        canvas { display: block; }
+        .hint { margin-top: 10px; color: #888; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+    <div class="toolbar">
+        <div class="tool-group">
+            <select id="sport-selector">
+                <option value="football">🏈 Football</option>
+                <option value="basketball">🏀 Basketball</option>
+                <option value="baseball">⚾ Baseball</option>
+                <option value="waterpolo">🤽 Water Polo</option>
+            </select>
+        </div>
+        
+        <div class="tool-group">
+            <button id="mode-arrow" class="mode-btn active">↗ Arrow</button>
+            <button id="mode-move" class="mode-btn">🖐 Move</button>
+            <button id="mode-text" class="mode-btn">🔤 Text</button>
+            <button id="mode-erase" class="mode-btn">🧽 Erase</button>
+        </div>
+
+        <div class="tool-group">
+            <button id="add-offense" class="btn-offense">+ O</button>
+            <button id="add-defense" class="btn-defense">+ X</button>
+        </div>
+
+        <div class="tool-group">
+            <button id="clear-arrows">Clear Paths</button>
+            <button id="clear-all" style="background-color: #c0392b;">Reset</button>
+        </div>
+
+        <div class="tool-group">
+            <button id="save-btn" class="btn-save">💾 Save PNG</button>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="playboard" width="800" height="500"></canvas>
+    </div>
+
+    <p class="hint">Switch sports to see the updated field layouts.</p>
+
+    <script>
+        const canvas = document.getElementById('playboard');
+        const ctx = canvas.getContext('2d');
+        
+        let currentSport = 'football';
+        let currentMode = 'arrow'; 
+        let arrows = [], players = [], labels = [];
+        let isDrawing = false, isDragging = false, draggedPlayer = null;
+        let startX = 0, startY = 0;
+        const PLAYER_RADIUS = 12;
+
+        function setMode(mode, btn) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        document.getElementById('mode-arrow').onclick = (e) => setMode('arrow', e.target);
+        document.getElementById('mode-move').onclick = (e) => setMode('move', e.target);
+        document.getElementById('mode-text').onclick = (e) => setMode('text', e.target);
+        document.getElementById('mode-erase').onclick = (e) => setMode('erase', e.target);
+        
+        document.getElementById('add-offense').onclick = () => { players.push({x:400, y:250, type:'offense'}); redraw(); };
+        document.getElementById('add-defense').onclick = () => { players.push({x:400, y:250, type:'defense'}); redraw(); };
+        document.getElementById('clear-arrows').onclick = () => { arrows = []; redraw(); };
+        document.getElementById('clear-all').onclick = () => { arrows = []; players = []; labels = []; redraw(); };
+        document.getElementById('sport-selector').onchange = (e) => { currentSport = e.target.value; redraw(); };
+
+        document.getElementById('save-btn').onclick = () => {
+            redraw(); 
+            const link = document.createElement('a');
+            link.download = `play-${currentSport}.png`;
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+        };
+
+        canvas.onmousedown = (e) => {
+            const {offsetX: x, offsetY: y} = e;
+            if (currentMode === 'arrow') { isDrawing = true; startX = x; startY = y; }
+            else if (currentMode === 'move') {
+                draggedPlayer = players.find(p => Math.hypot(p.x - x, p.y - y) < PLAYER_RADIUS * 1.5);
+                if (draggedPlayer) isDragging = true;
+            }
+            else if (currentMode === 'text') {
+                const text = prompt("Enter Label:");
+                if (text) { labels.push({x, y, text}); redraw(); }
+            }
+            else if (currentMode === 'erase') {
+                players = players.filter(p => Math.hypot(p.x - x, p.y - y) > PLAYER_RADIUS * 1.5);
+                labels = labels.filter(l => Math.hypot(l.x - x, l.y - y) > 20);
+                redraw();
+            }
+        };
+
+        canvas.onmousemove = (e) => {
+            if (isDrawing) { redraw(); drawArrow(startX, startY, e.offsetX, e.offsetY); }
+            else if (isDragging && draggedPlayer) { draggedPlayer.x = e.offsetX; draggedPlayer.y = e.offsetY; redraw(); }
+        };
+
+        canvas.onmouseup = (e) => {
+            if (isDrawing && Math.hypot(e.offsetX - startX, e.offsetY - startY) > 5) {
+                arrows.push({x1: startX, y1: startY, x2: e.offsetX, y2: e.offsetY});
+            }
+            isDrawing = false; isDragging = false; draggedPlayer = null;
+            redraw();
+        };
+
+        function drawArrow(x1, y1, x2, y2) {
+            const head = 15, angle = Math.atan2(y2 - y1, x2 - x1);
+            ctx.strokeStyle = '#f1c40f'; ctx.fillStyle = '#f1c40f'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 - head * Math.cos(angle - Math.PI/6), y2 - head * Math.sin(angle - Math.PI/6));
+            ctx.lineTo(x2 - head * Math.cos(angle + Math.PI/6), y2 - head * Math.sin(angle + Math.PI/6));
+            ctx.fill();
+        }
+
+        function redraw() {
+            drawField();
+            arrows.forEach(a => drawArrow(a.x1, a.y1, a.x2, a.y2));
+            players.forEach(p => {
+                ctx.beginPath(); ctx.arc(p.x, p.y, PLAYER_RADIUS, 0, Math.PI*2);
+                ctx.fillStyle = p.type === 'offense' ? '#3498db' : '#e67e22';
+                ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
+                ctx.fillText(p.type === 'offense' ? 'O' : 'X', p.x, p.y + 4);
+            });
+            labels.forEach(l => {
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center';
+                ctx.fillText(l.text, l.x, l.y);
+            });
+        }
+
+        function drawField() {
+            ctx.clearRect(0, 0, 800, 500);
+            ctx.lineWidth = 2;
+
+            if (currentSport === 'football') {
+                ctx.fillStyle = '#27ae60'; ctx.fillRect(0,0,800,500);
+                // Endzones
+                ctx.fillStyle = '#219150'; ctx.fillRect(0,0,80,500); ctx.fillRect(720,0,80,500);
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                for(let i=80; i<=720; i+=64) { 
+                    ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,500); ctx.stroke(); 
+                }
+            } 
+            else if (currentSport === 'basketball') {
+                ctx.fillStyle = '#e67e22'; ctx.fillRect(0,0,800,500);
+                ctx.strokeStyle = '#fff';
+                ctx.strokeRect(10, 10, 780, 480);
+                // Center Line & Circle
+                ctx.beginPath(); ctx.moveTo(400,10); ctx.lineTo(400,490); ctx.stroke();
+                ctx.beginPath(); ctx.arc(400, 250, 50, 0, Math.PI*2); ctx.stroke();
+                // Three Point Arcs
+                ctx.beginPath(); ctx.arc(10, 250, 200, -Math.PI/2.2, Math.PI/2.2); ctx.stroke();
+                ctx.beginPath(); ctx.arc(790, 250, 200, Math.PI - Math.PI/2.2, Math.PI + Math.PI/2.2); ctx.stroke();
+                // Keys
+                ctx.strokeRect(10, 170, 140, 160); ctx.strokeRect(650, 170, 140, 160);
+            } 
+            else if (currentSport === 'baseball') {
+                ctx.fillStyle = '#27ae60'; ctx.fillRect(0,0,800,500);
+                ctx.fillStyle = '#d35400'; // Dirt color
+                ctx.beginPath();
+                ctx.moveTo(400, 450); // Home
+                ctx.lineTo(600, 250); // 1st
+                ctx.lineTo(400, 50);  // 2nd
+                ctx.lineTo(200, 250); // 3rd
+                ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.beginPath(); ctx.moveTo(400, 450); ctx.lineTo(800, 50); ctx.moveTo(400, 450); ctx.lineTo(0, 50); ctx.stroke();
+            } 
+            else if (currentSport === 'waterpolo') {
+                ctx.fillStyle = '#2980b9'; ctx.fillRect(0,0,800,500);
+                ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(400,0); ctx.lineTo(400,500); ctx.stroke();
+                // 2m & 5m lines
+                ctx.strokeStyle = 'red'; ctx.beginPath(); ctx.moveTo(100,0); ctx.lineTo(100,500); ctx.moveTo(700,0); ctx.lineTo(700,500); ctx.stroke();
+                ctx.strokeStyle = 'yellow'; ctx.beginPath(); ctx.moveTo(200,0); ctx.lineTo(200,500); ctx.moveTo(600,0); ctx.lineTo(600,500); ctx.stroke();
+                // Goals
+                ctx.fillStyle = 'white'; ctx.fillRect(0, 200, 15, 100); ctx.fillRect(785, 200, 15, 100);
+            }
+        }
+        redraw();
+    </script>
+</body>
+</html>
